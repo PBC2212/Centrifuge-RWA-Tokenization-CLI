@@ -8,3 +8,5 @@ npm run prod-portfolio ✅
 Start Database: net start postgresql-x64-17
 Stop Database: net stop postgresql-x64-17
 Database Password: newpassword
+
+Centrifuge API Key: 92db030429d84e3db59fd0e8265cc366
