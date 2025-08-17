@@ -1,0 +1,10 @@
+npm run prod-health ✅
+npm run prod-wallet ✅
+npm run prod-pools ✅
+npm run prod-assets ✅
+npm run prod-borrow ✅
+npm run prod-portfolio ✅
+
+Start Database: net start postgresql-x64-17
+Stop Database: net stop postgresql-x64-17
+Database Password: newpassword

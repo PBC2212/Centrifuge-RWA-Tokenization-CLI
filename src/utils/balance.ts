@@ -95,10 +95,10 @@ export async function checkBalance(chain?: string): Promise<void> {
     console.log(`💰 Native Balance: ${balanceEth} ${getNativeTokenSymbol(chain)}`);
     
     // Check for common ERC-20 tokens on this chain
-    await checkERC20Balances(wallet, provider, chain);
+    await checkERC20Balances(wallet as any, provider, chain);
     
     // Check for RWA tokens (from our tokenization)
-    await checkRWATokenBalances(wallet, chain);
+    await checkRWATokenBalances(wallet as any, chain);
     
     // Show borrowing capacity
     await showBorrowingCapacity(wallet.address);
@@ -114,7 +114,7 @@ export async function checkBalance(chain?: string): Promise<void> {
   }
 }
 
-async function checkERC20Balances(wallet: ethers.Wallet, provider: ethers.JsonRpcProvider, chain: string): Promise<void> {
+async function checkERC20Balances(wallet: any, provider: ethers.JsonRpcProvider, chain: string): Promise<void> {
   const commonTokens = getCommonTokensForChain(chain);
   
   if (commonTokens.length === 0) return;
@@ -149,7 +149,7 @@ async function checkERC20Balances(wallet: ethers.Wallet, provider: ethers.JsonRp
   }
 }
 
-async function checkRWATokenBalances(wallet: ethers.Wallet, chain: string): Promise<void> {
+async function checkRWATokenBalances(wallet: any, chain: string): Promise<void> {
   console.log('\n🏛️ RWA Token Portfolio:');
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
   
@@ -253,7 +253,7 @@ export async function checkLiquidationRisk(walletAddress: string): Promise<any[]
   // This would check all active borrowing positions
   // and return those at risk of liquidation
   
-  const atRiskPositions = [];
+  const atRiskPositions: any[] = [];
   
   // Implementation would check:
   // 1. Current collateral values

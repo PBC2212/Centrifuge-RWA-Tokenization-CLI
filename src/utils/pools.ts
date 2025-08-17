@@ -83,17 +83,18 @@ async function syncPoolsFromCentrifuge(): Promise<void> {
     
     // Try different import patterns for Centrifuge SDK
     const CentrifugeModule = await import('@centrifuge/sdk');
-    let centrifuge;
+    let centrifuge: any;
 
-    if (CentrifugeModule.CentrifugeSDK) {
-      centrifuge = new CentrifugeModule.CentrifugeSDK({
-        network: process.env.CENTRIFUGE_NETWORK || 'centrifuge',
-        rpcUrl: process.env.CENTRIFUGE_RPC_URL
+    // Use the correct Centrifuge import with proper environment typing
+    const environment: 'mainnet' | 'testnet' = (process.env.CENTRIFUGE_NETWORK === 'testnet') ? 'testnet' : 'mainnet';
+    
+    if (CentrifugeModule.Centrifuge) {
+      centrifuge = new CentrifugeModule.Centrifuge({
+        environment: environment
       });
     } else if (CentrifugeModule.default) {
       centrifuge = new CentrifugeModule.default({
-        network: process.env.CENTRIFUGE_NETWORK || 'centrifuge',
-        rpcUrl: process.env.CENTRIFUGE_RPC_URL
+        environment: environment
       });
     } else {
       throw new Error('Centrifuge SDK not properly configured');
@@ -117,8 +118,8 @@ async function syncPoolsFromCentrifuge(): Promise<void> {
       console.log(`✅ Synced ${pools.length} pools from Centrifuge`);
     }
     
-  } catch (error) {
-    console.warn('⚠️ Centrifuge sync failed:', error.message);
+  } catch (error: any) {
+    console.warn('⚠️ Centrifuge sync failed:', error.message || error);
     throw error;
   }
 }

@@ -1,8 +1,7 @@
 // src/cli/index.ts
 import { Command } from 'commander';
 import inquirer from 'inquirer';
-
-// Existing utils (keep .js extensions for ES modules even with .ts files)
+// Existing utils
 import { initWallet } from '../utils/wallet.js';
 import { checkBalance } from '../utils/balance.js';
 import { listPools } from '../utils/pools.js';
@@ -76,7 +75,6 @@ program
       { type: 'number', name: 'valueUsd', message: 'Asset value (USD):' },
       { type: 'input', name: 'documentPath', message: 'Path to supporting document (optional):' }
     ]);
-    
     try {
       const asset = await pledgeAsset(
         answers.name,
@@ -95,18 +93,7 @@ program
   .description('List all pledged assets')
   .action(async () => {
     try {
-      const assets = await listAssets();
-      if (assets.length === 0) {
-        console.log('No assets pledged yet.');
-        return;
-      }
-      
-      console.log('📋 Pledged Assets:');
-      assets.forEach(asset => {
-        console.log(
-          `- ${asset.name}: $${asset.value_usd} (Doc: ${asset.document || 'none'}) [${asset.created_at}]`
-        );
-      });
+      await listAssets();
     } catch (err) {
       console.error('❌ Error listing assets:', err);
     }

@@ -11,7 +11,6 @@
     "rwa": "./dist/cli/index.js"
   },
   "scripts": {
-    "prepare": "husky install",
     "dev": "tsx src/cli/index.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/cli/index.js",
@@ -32,7 +31,7 @@
     "production": "tsx src/cli/production-index.ts",
     "health": "tsx src/cli/production-index.ts health",
     "wallet": "tsx src/cli/production-index.ts wallet",
-    "pools": "tsx src/cli/production-index.ts pools", 
+    "pools": "tsx src/cli/production-index.ts pools",
     "assets": "tsx src/cli/production-index.ts assets",
     "database": "tsx src/cli/production-index.ts database",
     "compliance": "tsx src/cli/production-index.ts compliance",
@@ -43,7 +42,16 @@
     "list-borrow-positions": "tsx src/cli/production-index.ts list-borrow-positions",
     "repay-loan": "tsx src/cli/production-index.ts repay-loan",
     "liquidation-check": "tsx src/cli/production-index.ts liquidation-check",
-    "portfolio-summary": "tsx src/cli/production-index.ts portfolio-summary"
+    "portfolio-summary": "tsx src/cli/production-index.ts portfolio-summary",
+
+    "prod": "tsx src/cli/minimal-production.ts",
+    "prod-health": "tsx src/cli/minimal-production.ts health",
+    "prod-wallet": "tsx src/cli/minimal-production.ts wallet",
+    "prod-assets": "tsx src/cli/minimal-production.ts assets",
+    "prod-pools": "tsx src/cli/minimal-production.ts pools",
+    "prod-borrow": "tsx src/cli/minimal-production.ts borrow",
+    "prod-portfolio": "tsx src/cli/minimal-production.ts portfolio",
+    "prod-interactive": "tsx src/cli/minimal-production.ts interactive"
   },
   "dependencies": {
     "@centrifuge/sdk": "^0.0.0-alpha.51",
@@ -69,6 +77,8 @@
     "@nomicfoundation/hardhat-toolbox": "^5.0.0",
     "@types/node": "^20.14.12",
     "@types/uuid": "^10.0.0",
+    "@types/pg": "^8.11.8",
+    "@types/inquirer": "^9.0.7",
     "@typescript-eslint/eslint-plugin": "^7.18.0",
     "@typescript-eslint/parser": "^7.18.0",
     "@vitest/coverage-v8": "^1.6.0",
@@ -76,7 +86,6 @@
     "eslint-config-prettier": "^9.1.0",
     "eslint-plugin-import": "^2.29.1",
     "hardhat": "^2.22.9",
-    "husky": "^9.1.4",
     "jest": "^29.7.0",
     "prettier": "^3.3.3",
     "ts-jest": "^29.2.3",
