@@ -1,0 +1,108 @@
+🅰️ part A — generate your real API key (windows)
+
+open powershell.
+
+run this to make a strong random string:
+
+[guid]::NewGuid().ToString("N")
+
+
+example output:
+
+5c3a8c39c1d74a86a20d4f6e8f88d88a
+
+
+that’s your API key. copy it and keep it safe.
+
+🅱️ part B — get centrifugo running on windows
+option 1: docker (recommended if you have docker desktop)
+docker run -d --name centrifugo `
+  -p 8000:8000 `
+  -v ${PWD}\config.json:/centrifugo/config.json `
+  centrifugo/centrifugo:latest `
+  centrifugo --config=/centrifugo/config.json
+
+option 2: native windows binary
+
+go to 👉 https://github.com/centrifugal/centrifugo/releases
+
+download the .zip for windows amd64.
+
+unzip it somewhere (e.g., C:\centrifugo).
+
+create C:\centrifugo\config.json with:
+
+{
+  "http_api": {
+    "key": "PASTE_YOUR_API_KEY_HERE",
+    "error_mode": "transport"
+  }
+}
+
+
+open powershell in that folder and run:
+
+.\centrifugo.exe --config=config.json
+
+🅲️ part C — quick test locally
+
+in powershell (replace with your api key):
+
+curl.exe -Method POST `
+  -Uri "http://127.0.0.1:8000/api/publish" `
+  -Headers @{ "Content-Type"="application/json"; "X-API-Key"="PASTE_YOUR_API_KEY_HERE" } `
+  -Body '{"channel":"test","data":{"ping":"pong"}}'
+
+
+expected response:
+
+{"result":{}}
+
+🅳️ part D — set your CLI environment vars on windows
+
+in your CLI project folder, create a file: .env.production
+
+put inside:
+
+CENTRIFUGE_API_KEY=PASTE_YOUR_API_KEY_HERE
+CENTRIFUGE_API_BASE=http://127.0.0.1:8000/api
+CENTRIFUGE_ADMIN_SEED="your twelve or twenty-four word mnemonic here"
+
+
+⚠️ never commit this file to git.
+
+make sure your node app loads dotenv in src/cli/production-index.ts:
+
+import 'dotenv/config'
+
+🅴️ part E — generate your CENTRIFUGE_ADMIN_SEED
+
+simplest way (windows):
+
+install Polkadot.js browser extension (chrome / brave / firefox).
+
+click add account → create new account.
+
+write down the 12/24-word mnemonic. that’s your admin seed.
+
+paste it into .env.production like above.
+
+🅵️ part F — run your CLI live
+
+in powershell:
+
+npm run prod-health
+
+
+or
+
+npm run prod
+
+
+(depending on which entry you wired).
+
+👉 next step depends on you:
+
+do you plan to stay local (http://127.0.0.1:8000) or put this live on a public domain with https?
+
+if it’s live/public, we’ll add nginx + certbot instructions (can also be done in windows with iis or via a linux vps).
