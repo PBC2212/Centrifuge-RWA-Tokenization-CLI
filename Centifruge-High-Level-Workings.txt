@@ -1,0 +1,95 @@
+🔑 How Centrifuge Works (high-level)
+
+Asset onboarding (off-chain + on-chain):
+
+A borrower pledges a real-world asset (like an invoice, property, etc).
+
+This asset is tokenized into an NFT (ERC-721) on the Centrifuge chain.
+
+Collateralization (Tinlake / Centrifuge Pools):
+
+That NFT is locked in a Centrifuge pool smart contract.
+
+The pool provides collateralized debt positions (CDPs) against that NFT.
+
+Liquidity provision:
+
+Pools are funded by DeFi liquidity (DAI, USDC, USDT) coming from protocols like MakerDAO or directly from lenders.
+
+Once your NFT is locked, you can borrow stablecoins against its appraised value.
+
+Repayment & liquidation:
+
+Borrowers repay with interest.
+
+If default happens, the NFT collateral (and the underlying RWA) can be liquidated.
+
+⚙️ For Your Platform (Centrifuge-RWA-Tokenization-CLI)
+
+Right now, your CLI simulates step 1 (pledging assets into a local DB).
+To actually connect to Centrifuge and enable borrowing, you’d need to:
+
+1. Deploy NFTs for pledged RWAs
+
+Each pledged asset in your DB should be minted as an ERC-721 NFT on Centrifuge (or even Sepolia for testing).
+
+That NFT becomes the on-chain representation of your RWA.
+
+2. Integrate with Centrifuge Pools (Tinlake smart contracts)
+
+Centrifuge pools are deployed smart contracts (ERC-20 + collateral manager).
+
+You’d need your CLI to connect to the pool contracts via ethers.js / web3.js.
+
+Function calls:
+
+lockNFT(nftId) → locks your NFT as collateral.
+
+borrow(amount, stablecoin) → borrows DAI/USDT against your NFT.
+
+repay(amount) → repays borrowed amount with interest.
+
+3. Stablecoin source (DAI/USDT)
+
+On Ethereum mainnet, DAI typically comes from MakerDAO vaults.
+
+In Centrifuge’s case, the pool contract mints a pool token (TIN/DROP), backed by incoming liquidity, and distributes DAI/USDC to the borrower.
+
+On Sepolia/testnet → you could use mock ERC-20s for DAI/USDT.
+
+4. Bridge CLI → Centrifuge chain
+
+Centrifuge has its own chain (Substrate/Polkadot), bridged to Ethereum.
+
+To borrow in practice, your platform would:
+
+Mint NFT on Centrifuge chain.
+
+Bridge it to Ethereum pool.
+
+Execute borrowing via Ethereum smart contracts.
+
+🔮 Your Next Step
+
+To get borrowing working in your CLI, you’d add a command like:
+
+npm run borrow-asset -- --assetId <uuid> --amount 1000 --token DAI
+
+
+That command would:
+
+Look up the pledged asset in your DB.
+
+Ensure it’s minted as an NFT on-chain (ERC-721).
+
+Call the Centrifuge/Tinlake pool contract’s borrow() method.
+
+Send DAI/USDT to the borrower’s wallet.
+
+👉 So in essence:
+
+Your DB → NFT → Pool contract → Stablecoin liquidity.
+
+The CLI is the UI layer.
+
+Centrifuge provides the pool contracts + liquidity sources.

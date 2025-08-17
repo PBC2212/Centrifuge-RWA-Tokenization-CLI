@@ -1,0 +1,88 @@
+{
+  "name": "centrifuge-rwa-cli",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Command-line decentralized RWA lending platform integrated with the Centrifuge Protocol (Hub-and-Spoke).",
+  "type": "module",
+  "engines": {
+    "node": ">=18.18.0"
+  },
+  "bin": {
+    "rwa": "./dist/cli/index.js"
+  },
+  "scripts": {
+    "prepare": "husky install",
+    "dev": "tsx src/cli/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/cli/index.js",
+    "lint": "eslint . --ext .ts",
+    "format": "prettier --write .",
+    "test": "jest --runInBand",
+    "test:watch": "jest --watch",
+    "hardhat": "hardhat",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+
+    "init-wallet": "tsx src/cli/index.ts init-wallet",
+    "check-balance": "tsx src/cli/index.ts check-balance",
+    "list-pools": "tsx src/cli/index.ts list-pools",
+    "check-db": "tsx src/cli/index.ts check-db",
+    "pledge-asset": "tsx src/cli/index.ts pledge-asset",
+    "list-assets": "tsx src/cli/index.ts list-assets",
+
+    "production": "tsx src/cli/production-index.ts",
+    "health": "tsx src/cli/production-index.ts health",
+    "wallet": "tsx src/cli/production-index.ts wallet",
+    "pools": "tsx src/cli/production-index.ts pools", 
+    "assets": "tsx src/cli/production-index.ts assets",
+    "database": "tsx src/cli/production-index.ts database",
+    "compliance": "tsx src/cli/production-index.ts compliance",
+    "interactive": "tsx src/cli/production-index.ts interactive",
+    "admin": "tsx src/cli/production-index.ts admin",
+
+    "borrow-against-asset": "tsx src/cli/production-index.ts borrow-against-asset",
+    "list-borrow-positions": "tsx src/cli/production-index.ts list-borrow-positions",
+    "repay-loan": "tsx src/cli/production-index.ts repay-loan",
+    "liquidation-check": "tsx src/cli/production-index.ts liquidation-check",
+    "portfolio-summary": "tsx src/cli/production-index.ts portfolio-summary"
+  },
+  "dependencies": {
+    "@centrifuge/sdk": "^0.0.0-alpha.51",
+    "@commander-js/extra-typings": "^12.1.0",
+    "argon2": "^0.40.3",
+    "axios": "^1.7.4",
+    "commander": "^12.1.0",
+    "dotenv": "^16.6.1",
+    "ethers": "^6.13.2",
+    "inquirer": "^12.9.2",
+    "ipfs-http-client": "^60.0.1",
+    "node-fetch": "^3.3.2",
+    "pg": "^8.16.3",
+    "prompt-sync": "^4.2.0",
+    "readline-sync": "^1.4.10",
+    "tweetnacl": "^1.0.3",
+    "tweetnacl-util": "^0.15.1",
+    "uuid": "^9.0.1",
+    "viem": "^2.33.3",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "@types/node": "^20.14.12",
+    "@types/uuid": "^10.0.0",
+    "@typescript-eslint/eslint-plugin": "^7.18.0",
+    "@typescript-eslint/parser": "^7.18.0",
+    "@vitest/coverage-v8": "^1.6.0",
+    "eslint": "^8.57.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-import": "^2.29.1",
+    "hardhat": "^2.22.9",
+    "husky": "^9.1.4",
+    "jest": "^29.7.0",
+    "prettier": "^3.3.3",
+    "ts-jest": "^29.2.3",
+    "ts-node": "^10.9.2",
+    "tslib": "^2.6.3",
+    "tsx": "^4.16.2",
+    "typescript": "^5.5.4"
+  }
+}

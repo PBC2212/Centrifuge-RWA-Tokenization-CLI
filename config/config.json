@@ -1,0 +1,79 @@
+{
+  "centrifuge": {
+    "environment": "demo",
+    "rpc": {
+      "demo": "https://rpc.sepolia.org",
+      "mainnet": "https://eth-mainnet.public.blastapi.io",
+      "dev": "https://rpc.sepolia.org"
+    },
+    "indexerUrl": "https://indexer.centrifuge.io",
+    "ipfsUrl": "https://ipfs.centrifuge.io"
+  },
+  "chains": {
+    "hub": {
+      "name": "Ethereum",
+      "network": "mainnet",
+      "chainId": 1,
+      "explorer": "https://etherscan.io/"
+    },
+    "hubDemo": {
+      "name": "Sepolia",
+      "network": "demo",
+      "chainId": 11155111,
+      "explorer": "https://sepolia.etherscan.io/"
+    },
+    "spokes": [
+      {
+        "name": "Polygon",
+        "chainId": 137,
+        "explorer": "https://polygonscan.com/"
+      },
+      {
+        "name": "Base",
+        "chainId": 8453,
+        "explorer": "https://basescan.org/"
+      }
+    ]
+  },
+  "contracts": {
+    "hub": {
+      "manager": "",
+      "transferHooks": "",
+      "priceFeed": "",
+      "rwaTokenFactory": ""
+    },
+    "vaults": {
+      "erc4626Factory": "",
+      "erc7540Factory": ""
+    }
+  },
+  "ipfs": {
+    "gateway": "https://ipfs.io/ipfs/",
+    "pinning": {
+      "enabled": false,
+      "provider": "pinata",
+      "apiKey": "",
+      "secretApiKey": ""
+    }
+  },
+  "db": {
+    "connectionString": "postgres://postgres:postgres@localhost:5432/centrifuge_rwa_cli",
+    "ssl": false,
+    "pool": {
+      "min": 0,
+      "max": 10,
+      "idleTimeoutMillis": 10000
+    }
+  },
+  "security": {
+    "walletStorage": "home", 
+    "keyDerivation": "argon2id",
+    "showPrivateKeyByDefault": false
+  },
+  "features": {
+    "permissionedPools": true,
+    "erc1404Compliance": true,
+    "gasAbstraction": true,
+    "enableBurnAndMintXCM": true
+  }
+}
