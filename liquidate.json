@@ -1,0 +1,10 @@
+{
+  "loanId": "0xLoanIdFromBorrowTransactionHere",
+  "liquidator": "0xYourWalletAddressHere",
+  "reason": "Loan repayment overdue beyond grace period",
+  "collateralAssetId": "0xCollateralNFTIdHere",
+  "liquidationDate": "2025-12-15",
+  "metadata": {
+    "note": "Liquidation triggered after borrower default"
+  }
+}

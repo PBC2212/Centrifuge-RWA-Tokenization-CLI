@@ -4,9 +4,99 @@ npm run prod-pools ✅
 npm run prod-assets ✅
 npm run prod-borrow ✅
 npm run prod-portfolio ✅
+npm run prod-assets -- --file asset.json
+npm run prod-borrow -- --pool PoolIdHere --asset AssetIdHere --amount 25000
+npm run prod-borrow -- --file borrow.json
+npm run prod-borrow -- --file repay.json
+npm run prod-borrow -- --file liquidate.json
+npm run prod-portfolio -- --file portfolio.json
+
+
 
 Start Database: net start postgresql-x64-17
 Stop Database: net stop postgresql-x64-17
 Database Password: newpassword
 
 Centrifuge API Key: 92db030429d84e3db59fd0e8265cc366
+
+Cenrifuge Server Startup: .\centrifugo.exe --config=config.json
+CENTRIFUGO_ADMIN_PASSWORD=Lifestyle2570%%12%
+http://localhost:8000
+
+___________________________________________________________
+Config File:
+
+{
+  "admin": {
+    "enabled": true
+  }
+}
+
+____________________________________________________________
+
+🔑 Step 1. Wallet (Identity & Funding)
+npm run prod-wallet
+
+
+Generates/loads your wallet (CFG/ETH address).
+
+Fund this wallet with native tokens (for gas) and stablecoins (for repayments).
+
+This is your identity across assets & pools.
+
+🏦 Step 2. Pools (Where borrowing happens)
+npm run prod-pools
+
+
+Lists available credit pools you can join.
+
+Pick the pool that matches your RWA type (invoice, real estate, etc.).
+
+Each pool has: PoolId, currency (DAI/USDT/USDC), LTV policy, APR.
+
+Note your PoolId — you’ll need it to pledge/borrow.
+
+📜 Step 3. Assets (Tokenize your RWA)
+npm run prod-assets
+
+
+Here you mint an NFT that represents your real-world asset (invoice, property, contract, etc.).
+
+Input: JSON metadata (like asset.json we drafted earlier).
+
+Output: AssetId (your token on-chain).
+Once minted, this NFT can be pledged as collateral.
+
+📌 Step 4. Borrow (Pledge & Draw Credit)
+npm run prod-borrow
+
+
+First: pledge your AssetId into the chosen PoolId.
+
+The CLI should show max borrowable amount = FaceValue * LTV.
+
+Then: request drawdown (borrow X amount).
+
+Funds are sent to your wallet (DAI/USDT/USDC).
+
+📊 Step 5. Portfolio (Track Loans & Collateral)
+npm run prod-portfolio
+
+
+Monitor outstanding loans, pledged assets, repayment schedules.
+
+Repay loans here as well.
+
+When fully repaid → release NFT collateral back to your wallet.
+
+✅ That’s the full flow:
+
+prod-wallet → identity
+
+prod-pools → choose pool
+
+prod-assets → tokenize RWA (NFT)
+
+prod-borrow → pledge + draw credit
+
+prod-portfolio → manage, repay, release

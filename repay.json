@@ -1,0 +1,10 @@
+{
+  "loanId": "0xLoanIdFromBorrowTransactionHere",
+  "borrower": "0xYourWalletAddressHere",
+  "amount": "25000",
+  "currency": "DAI",
+  "repaymentDate": "2025-11-30",
+  "metadata": {
+    "note": "Full repayment of loan against Invoice INV-2025-001"
+  }
+}

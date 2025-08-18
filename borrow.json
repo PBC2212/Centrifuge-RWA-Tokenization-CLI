@@ -1,0 +1,14 @@
+{
+  "poolId": "0xPoolIdFromProdPoolsHere",
+  "assetId": "0xAssetIdFromProdAssetsHere",
+  "borrower": "0xYourWalletAddressHere",
+  "amount": "25000",
+  "currency": "DAI",
+  "ltvRatio": "0.50",
+  "repaymentDate": "2025-12-31",
+  "metadata": {
+    "purpose": "Working capital against invoice INV-2025-001",
+    "collateralType": "Invoice",
+    "jurisdiction": "US-DE"
+  }
+}

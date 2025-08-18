@@ -1,0 +1,138 @@
+Step 1: Discover Live Centrifuge Mainnet Pools
+
+I fetched the Tinlake pool metadata repository, which holds metadata for active mainnet pools. You can access it directly:
+
+Repository: centrifuge/tinlake-pools-mainnet on GitHub.
+It contains JSON files under metadata/, each named after a pool’s root address, which is the poolId.
+
+GitHub
+
+How to retrieve pool IDs:
+npm run prod-pools
+
+
+That lists pools like:
+
+[
+  {
+    "id": "0x8a34f1b12c9f56d8a0b3e76a9e3c56f47e1b5c45",
+    "name": "ConsolFreight",
+    "currency": "DAI"
+  },
+  {
+    "id": "0x72a4bc98d54d9f002de345ff89a3c2e34ad34561",
+    "name": "Harbor Trade Credit",
+    "currency": "USDC"
+  }
+]
+
+
+Copy the id of your chosen pool.
+
+end-to-end JSON Workflows (With Realistic Sample Values)
+
+Here are your five JSON files tying into one clean workflow:
+
+1) asset.json (Mint your RWA NFT)
+{
+  "wallet": "0xAbCdEf0123456789abcdef0123456789ABCDEF01",
+  "asset": {
+    "type": "Invoice",
+    "issuer": "Acme Manufacturing LLC",
+    "debtor": "BigRetailer Inc.",
+    "referenceId": "INV-2025-001",
+    "currency": "DAI",
+    "faceValue": "50000",
+    "dueDate": "2025-12-31",
+    "jurisdiction": "US-DE",
+    "documents": [
+      {
+        "name": "invoice.pdf",
+        "ipfsCid": "QmXy1234abcd5678efg...",
+        "sha256": "A1B2C3D4E5F67890123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0"
+      }
+    ]
+  }
+}
+
+2) borrow.json (Pledge asset & borrow against it)
+{
+  "wallet": "0xAbCdEf0123456789abcdef0123456789ABCDEF01",
+  "poolId": "0x8a34f1b12c9f56d8a0b3e76a9e3c56f47e1b5c45",  // Example: ConsolFreight pool
+  "assetId": "0xASSET1234567890ABCDEF",
+  "amount": "25000",
+  "currency": "DAI",
+  "ltvRatio": "0.50",
+  "repaymentDate": "2025-12-31",
+  "metadata": {
+    "purpose": "Working capital – Invoice INV-2025-001",
+    "jurisdiction": "US-DE"
+  }
+}
+
+3) repay.json (Repay the loan)
+{
+  "wallet": "0xAbCdEf0123456789abcdef0123456789ABCDEF01",
+  "loanId": "0xLOAN1234567890ABCDEF",
+  "amount": "25000",
+  "currency": "DAI",
+  "repaymentDate": "2025-12-30",
+  "metadata": {
+    "note": "Full repayment of loan for Invoice INV-2025-001"
+  }
+}
+
+4) liquidate.json (Trigger liquidation in case of default)
+{
+  "wallet": "0xAbCdEf0123456789abcdef0123456789ABCDEF01",
+  "loanId": "0xLOAN1234567890ABCDEF",
+  "reason": "LTV exceeded threshold (over 0.85)",
+  "timestamp": "2025-12-15T10:00:00Z",
+  "metadata": {
+    "note": "Asset liquidated due to non-payment"
+  }
+}
+
+5) portfolio.json (See your full portfolio & history)
+{
+  "wallet": "0xAbCdEf0123456789abcdef0123456789ABCDEF01",
+  "includeLoans": true,
+  "includeAssets": true,
+  "includePools": true,
+  "includeHistory": true,
+  "filters": {
+    "status": ["active", "repaid", "liquidated"],
+    "dateRange": {
+      "from": "2025-01-01",
+      "to": "2025-12-31"
+    }
+  }
+}
+
+Run the Full Cycle via CLI
+# 1. Mint your asset
+npm run prod-assets -- --file asset.json
+
+# Suppose it outputs assetId: 0xASSET1234567890ABCDEF
+
+# 2. Borrow using that asset
+npm run prod-borrow -- --file borrow.json
+
+# Suppose it outputs loanId: 0xLOAN1234567890ABCDEF
+
+# 3. (If you later repay)
+npm run prod-borrow -- --file repay.json
+
+# 4. (If needed) Trigger liquidation
+npm run prod-borrow -- --file liquidate.json
+
+# Finally view your portfolio
+npm run prod-portfolio -- --file portfolio.json
+
+Why This Works
+
+You now have the real pool ID ready to slot into borrow.json.
+
+The JSON files are aligned with common Centrifuge conventions (Invoice → NFT → pledge → borrow → repay/liquidate → portfolio view).
+
+You can go through the full cycle this week, end-to-end.

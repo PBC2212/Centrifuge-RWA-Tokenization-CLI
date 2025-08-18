@@ -1,0 +1,14 @@
+{
+  "walletAddress": "0xYourWalletAddressHere",
+  "includeLoans": true,
+  "includeAssets": true,
+  "includePools": true,
+  "includeHistory": true,
+  "filters": {
+    "status": ["active", "repaid", "liquidated"],
+    "dateRange": {
+      "from": "2025-01-01",
+      "to": "2025-12-31"
+    }
+  }
+}

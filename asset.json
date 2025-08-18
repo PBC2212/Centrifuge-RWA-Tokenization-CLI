@@ -1,0 +1,16 @@
+{
+  "assetType": "Invoice",
+  "issuer": "Acme Manufacturing LLC",
+  "borrowerWallet": "0xYourWalletAddressHere",
+  "faceValue": "50000",
+  "currency": "DAI",
+  "dueDate": "2025-12-31",
+  "metadata": {
+    "invoiceNumber": "INV-2025-001",
+    "debtor": "BigRetailer Inc.",
+    "description": "Invoice for delivery of 10,000 units of product",
+    "issueDate": "2025-08-15",
+    "jurisdiction": "US-DE",
+    "documentHash": "QmXy1234abcd5678efg..." 
+  }
+}
