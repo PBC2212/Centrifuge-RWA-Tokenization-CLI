@@ -27,5 +27,26 @@
     "id": 2,
     "created_at": "2025-08-17T19:58:54.570Z",
     "updated_at": "2025-08-17T19:58:54.571Z"
+  },
+  {
+    "name": "FFF",
+    "description": "Real Estate Sol",
+    "asset_type": "Equipment Financing",
+    "value_usd": 1000,
+    "currency": "USD",
+    "documents": [],
+    "metadata": {
+      "location": "Michigan",
+      "hasAppraisal": true,
+      "hasInsurance": true,
+      "createdBy": "cli",
+      "version": "1.0"
+    },
+    "tokenization_status": "pending",
+    "wallet_address": "0x1199E5FbA5C0027F3C5102c0bfA3C8C65f78E358",
+    "is_active": true,
+    "id": 3,
+    "created_at": "2025-08-18T13:39:15.482Z",
+    "updated_at": "2025-08-18T13:39:15.484Z"
   }
 ]
