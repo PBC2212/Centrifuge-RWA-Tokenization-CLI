@@ -10,6 +10,10 @@ dotenv.config();
 import { initWallet } from '../utils/wallet.js';
 import { checkBalance } from '../utils/balance.js';
 import { pledgeAsset, listAssets } from '../utils/assets.js';
+import { mintNFT } from '../utils/nft.js';
+import { collateralize } from '../utils/collateral.js';
+import { borrow } from '../utils/borrow.js';
+import { repay } from '../utils/repay.js';
 
 const program = new Command();
 
@@ -108,6 +112,86 @@ program
     }
   });
 
+// NFT Minting
+program
+  .command('mint-nft')
+  .description('Mint an RWA NFT')
+  .argument('<description>', 'NFT Description')
+  .argument('<classId>', 'Class ID')
+  .action(async (description, classId) => {
+    try {
+      console.log('🎨 Minting RWA NFT...');
+      console.log(`📝 Description: ${description}`);
+      console.log(`🏷️ Class ID: ${classId}`);
+      
+      await mintNFT(description, Number(classId));
+      console.log('✅ NFT minted successfully!');
+      console.log('💡 You can now use this NFT as collateral for borrowing.');
+    } catch (error: any) {
+      console.error('❌ NFT minting failed:', error.message);
+    }
+  });
+
+// Collateralization
+program
+  .command('collateralize')
+  .description('Submit NFT as collateral')
+  .argument('<poolId>', 'Pool ID')
+  .argument('<nftId>', 'NFT ID')
+  .action(async (poolId, nftId) => {
+    try {
+      console.log('🔒 Submitting NFT as collateral...');
+      console.log(`🏊 Pool ID: ${poolId}`);
+      console.log(`🎨 NFT ID: ${nftId}`);
+      
+      await collateralize(poolId, nftId);
+      console.log('✅ NFT successfully submitted as collateral!');
+      console.log('💰 You can now borrow against this collateral.');
+    } catch (error: any) {
+      console.error('❌ Collateralization failed:', error.message);
+    }
+  });
+
+// Borrowing from Tinlake Pool
+program
+  .command('borrow')
+  .description('Borrow from Tinlake Pool')
+  .argument('<poolId>', 'Pool ID')
+  .argument('<amount>', 'Amount to borrow')
+  .action(async (poolId, amount) => {
+    try {
+      console.log('💰 Initiating borrow transaction...');
+      console.log(`🏊 Pool ID: ${poolId}`);
+      console.log(`💵 Amount: ${amount}`);
+      
+      await borrow(Number(poolId), amount);
+      console.log('✅ Borrow transaction completed successfully!');
+      console.log('📊 Check your wallet balance to see the borrowed funds.');
+    } catch (error: any) {
+      console.error('❌ Borrow transaction failed:', error.message);
+    }
+  });
+
+// Loan Repayment
+program
+  .command('repay')
+  .description('Repay loan to Tinlake Pool')
+  .argument('<poolId>', 'Pool ID')
+  .argument('<amount>', 'Amount to repay')
+  .action(async (poolId, amount) => {
+    try {
+      console.log('🔄 Processing loan repayment...');
+      console.log(`🏊 Pool ID: ${poolId}`);
+      console.log(`💵 Amount: ${amount}`);
+      
+      await repay(Number(poolId), amount);
+      console.log('✅ Loan repayment completed successfully!');
+      console.log('🎉 Your collateral status has been updated.');
+    } catch (error: any) {
+      console.error('❌ Loan repayment failed:', error.message);
+    }
+  });
+
 // Pools (mock data for now)
 program
   .command('pools')
@@ -144,35 +228,17 @@ program
       console.log('   Max LTV: 70%');
       console.log('   Status: ACTIVE');
       console.log('   ─────────────────────────────────────────────────────────────────────────');
-      console.log('\n💡 Use "npm run borrow" to borrow against your tokenized RWA collateral');
+      console.log('\n💡 Use the new NFT workflow:');
+      console.log('   1. mint-nft "Description" 1');
+      console.log('   2. collateralize POOL-ID NFT-ID');
+      console.log('   3. borrow POOL-ID AMOUNT');
     } else {
       console.log('Pool Options:');
       console.log('  --list    List available lending pools');
     }
   });
 
-// Borrowing functionality (simplified)
-program
-  .command('borrow')
-  .description('Borrow against tokenized RWA collateral')
-  .action(async () => {
-    console.log('🏦 Centrifuge RWA Borrowing Platform');
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.log('💡 To start borrowing:');
-    console.log('1. First create and tokenize your assets: npm run assets -- --create');
-    console.log('2. Check available pools: npm run pools -- --list');
-    console.log('3. Your tokenized assets can be used as collateral');
-    console.log('4. Borrow up to 75% of your asset value');
-    console.log('');
-    console.log('📊 Current borrowing rates:');
-    console.log('• Real Estate: 7.25% APR');
-    console.log('• Trade Finance: 9.80% APR');
-    console.log('• Receivables: 8.45% APR');
-    console.log('');
-    console.log('🚀 Full borrowing functionality ready for production launch!');
-  });
-
-// Portfolio summary
+// Enhanced portfolio summary
 program
   .command('portfolio')
   .description('Complete portfolio summary')
@@ -183,19 +249,27 @@ program
     console.log('\n🏛️ TOKENIZED ASSETS:');
     await listAssets();
     
+    console.log('\n🎨 NFT WORKFLOW:');
+    console.log('• Mint RWA NFTs: Tokenize your real-world assets');
+    console.log('• Collateralize: Submit NFTs to lending pools');
+    console.log('• Borrow: Access liquidity against your NFT collateral');
+    console.log('• Repay: Maintain good standing and unlock collateral');
+    
     console.log('\n🏦 BORROWING CAPACITY:');
     console.log('• Available to borrow: Based on your tokenized assets');
     console.log('• Maximum LTV: 75% of asset value');
     console.log('• Interest rates: 7-10% APR depending on asset type');
     console.log('• Flexible repayment terms: 30 days to 2 years');
     
-    console.log('\n💡 Next Steps:');
+    console.log('\n💡 Complete RWA Workflow:');
     console.log('1. Create assets: npm run assets -- --create');
-    console.log('2. View pools: npm run pools -- --list');
-    console.log('3. Start borrowing: npm run borrow');
+    console.log('2. Mint NFT: npm run mint-nft "My Property" 1');
+    console.log('3. Collateralize: npm run collateralize POOL-ID NFT-ID');
+    console.log('4. Borrow funds: npm run borrow POOL-ID AMOUNT');
+    console.log('5. Repay loan: npm run repay POOL-ID AMOUNT');
   });
 
-// Interactive mode
+// Interactive mode with enhanced options
 program
   .command('interactive')
   .description('Start interactive mode')
@@ -208,12 +282,21 @@ program
     console.log('• wallet --balance    - Check wallet balance');
     console.log('• assets --create     - Pledge real-world assets');
     console.log('• assets --list       - View your assets');
+    console.log('• mint-nft <desc> <id> - Mint RWA NFT');
+    console.log('• collateralize <pool> <nft> - Submit NFT as collateral');
+    console.log('• borrow <pool> <amount> - Borrow against collateral');
+    console.log('• repay <pool> <amount> - Repay loan');
     console.log('• pools --list        - View lending pools');
-    console.log('• borrow              - Borrow against RWA collateral');
     console.log('• portfolio           - Complete portfolio summary');
     console.log('');
+    console.log('🎨 New NFT-Based Lending Workflow:');
+    console.log('1. Mint NFTs from your real-world assets');
+    console.log('2. Use NFTs as collateral in lending pools');
+    console.log('3. Borrow against your tokenized assets');
+    console.log('4. Repay loans to maintain collateral status');
+    console.log('');
     console.log('🏦 This is your production-ready Centrifuge RWA platform!');
-    console.log('Start by creating a wallet and pledging your first asset.');
+    console.log('Start by creating a wallet and minting your first RWA NFT.');
   });
 
 // Handle command execution

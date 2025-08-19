@@ -1,0 +1,92 @@
+🔑 1. Wallet Setup
+
+You need an Ethereum wallet (Metamask, Safe, Ledger, etc.).
+
+Fund it with CFG (for Centrifuge chain) and ETH (for bridging & gas).
+
+👉 Since you’re building a CLI, you’ve already got wallet generation/encryption in place (.wallets/wallet.json). Make sure that wallet is funded.
+
+🌉 2
+You said:
+2
+ChatGPT said:
+
+Perfect — let’s continue from Step 2 👇
+
+🌉 2. Bridge to Centrifuge
+
+Centrifuge runs on its own parachain (CFG) in the Polkadot ecosystem.
+
+To interact with borrowing pools, you’ll need CFG tokens for transaction fees.
+
+Bridge some ETH or DAI/USDC from Ethereum/Polygon → Centrifuge via the Centrifuge Bridge.
+
+Example: Move USDC from Ethereum to Centrifuge chain, so it can be used in pools.
+
+🏛️ 3. Pool Selection
+
+Centrifuge doesn’t allow you to just borrow anywhere — you must borrow through a specific pool.
+
+Pools are created by Asset Originators (AOs) who onboard RWAs (invoices, real estate, etc.).
+
+To borrow, you:
+
+Tokenize your RWA (mint an NFT that represents your asset, e.g., an invoice).
+
+Submit that NFT as collateral to a pool that supports your asset type.
+
+The pool investors provide DAI/USDC liquidity → you borrow against it.
+
+📄 4. RWA Tokenization (Critical)
+
+This is the entry point for borrowers:
+
+You create an NFT on Centrifuge chain that represents your real-world asset.
+
+The NFT is stored in the Centrifuge chain’s Unique Asset Registry.
+
+That NFT becomes your collateral in the pool.
+
+Your CLI will need to implement:
+
+mint-rwa-nft → creates the tokenized asset.
+
+submit-collateral → locks the NFT in the pool.
+
+💵 5. Borrowing Stablecoins
+
+Once collateral is deposited, you can:
+
+Call the pool’s smart contract → borrow DAI/USDC.
+
+Funds are bridged to Ethereum (because Centrifuge liquidity comes from MakerDAO/other investors).
+
+Repayment is also done through the pool, and your collateral is released after full repayment.
+
+✅ 6. Compliance / KYC
+
+Centrifuge is regulated, meaning borrowers must complete KYC with the Asset Originator (AO).
+
+In practice:
+
+You apply to borrow via a pool’s AO.
+
+After approval, your wallet is whitelisted → only then you can borrow.
+
+This is a mandatory off-chain step before your CLI can “actually” execute borrowing transactions.
+
+🚀 So your roadmap:
+
+Fund wallet with CFG (for tx fees).
+
+Bridge stablecoins (USDC/DAI) into Centrifuge.
+
+Onboard asset (via NFT minting in Centrifuge chain).
+
+Apply to a borrowing pool (KYC + AO approval).
+
+Deposit NFT as collateral.
+
+Borrow stablecoins (USDC/DAI).
+
+Manage repayment and release collateral.

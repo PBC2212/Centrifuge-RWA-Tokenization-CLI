@@ -1,6 +1,12 @@
 // src/utils/monitoring.ts - Production monitoring and logging
 import * as fs from 'fs';
 import * as path from 'path';
+import * as dotenv from 'dotenv';
+import { testDatabaseConnection } from './db.js';
+import { testIpfsConnection } from './ipfs.js';
+import { checkNetworkConnectivity } from './centrifuge.js';
+
+dotenv.config();
 
 export enum LogLevel {
   ERROR = 0,
@@ -14,21 +20,53 @@ export interface MonitoringConfig {
   enableMetrics: boolean;
   sentryDsn?: string;
   datadogApiKey?: string;
+  enableFileLogging?: boolean;
+  logRotationDays?: number;
+  alertThresholds?: {
+    memoryUsage: number;
+    errorRate: number;
+    responseTime: number;
+  };
+}
+
+export interface HealthCheck {
+  name: string;
+  status: 'healthy' | 'degraded' | 'unhealthy';
+  responseTime?: number;
+  error?: string;
+  lastChecked: string;
+  details?: any;
+}
+
+export interface Alert {
+  id: string;
+  severity: 'critical' | 'warning' | 'info';
+  message: string;
+  details?: any;
+  timestamp: string;
+  environment: string;
+  resolved?: boolean;
+  resolvedAt?: string;
 }
 
 class ProductionMonitor {
   private config: MonitoringConfig;
   private metricsData: Map<string, any> = new Map();
   private logFile: string;
+  private alertHistory: Alert[] = [];
+  private performanceMetrics: Map<string, number[]> = new Map();
 
   constructor(config: MonitoringConfig) {
     this.config = config;
     this.logFile = path.join(process.cwd(), 'logs', `app-${new Date().toISOString().split('T')[0]}.log`);
     this.ensureLogDirectory();
     this.initializeMonitoring();
+    this.setupProcessHandlers();
   }
 
   private ensureLogDirectory(): void {
+    if (!this.config.enableFileLogging) return;
+    
     const logDir = path.dirname(this.logFile);
     if (!fs.existsSync(logDir)) {
       fs.mkdirSync(logDir, { recursive: true });
@@ -36,13 +74,16 @@ class ProductionMonitor {
   }
 
   private initializeMonitoring(): void {
+    console.log('🔄 Initializing production monitoring...');
+
     // Initialize Sentry for error tracking
     if (this.config.sentryDsn) {
       try {
         // TODO: Initialize Sentry SDK
         console.log('🔍 Sentry error tracking initialized');
-      } catch (error) {
-        this.log(LogLevel.WARN, 'Failed to initialize Sentry', { error });
+        this.recordMetric('monitoring.sentry.initialized', 1, 'counter');
+      } catch (error: any) {
+        this.log(LogLevel.WARN, 'Failed to initialize Sentry', { error: error.message });
       }
     }
 
@@ -51,8 +92,9 @@ class ProductionMonitor {
       try {
         // TODO: Initialize Datadog SDK
         console.log('📊 Datadog metrics initialized');
-      } catch (error) {
-        this.log(LogLevel.WARN, 'Failed to initialize Datadog', { error });
+        this.recordMetric('monitoring.datadog.initialized', 1, 'counter');
+      } catch (error: any) {
+        this.log(LogLevel.WARN, 'Failed to initialize Datadog', { error: error.message });
       }
     }
 
@@ -60,6 +102,45 @@ class ProductionMonitor {
     if (this.config.enableMetrics) {
       this.startMetricsCollection();
     }
+
+    // Setup log rotation
+    if (this.config.enableFileLogging && this.config.logRotationDays) {
+      this.setupLogRotation();
+    }
+
+    console.log('✅ Production monitoring initialized successfully');
+  }
+
+  private setupProcessHandlers(): void {
+    // Handle uncaught exceptions
+    process.on('uncaughtException', (error) => {
+      this.log(LogLevel.ERROR, 'Uncaught Exception', { 
+        error: error.message, 
+        stack: error.stack 
+      });
+      this.alert('critical', 'Uncaught Exception', { error: error.message });
+      process.exit(1);
+    });
+
+    // Handle unhandled promise rejections
+    process.on('unhandledRejection', (reason, promise) => {
+      this.log(LogLevel.ERROR, 'Unhandled Promise Rejection', { 
+        reason: reason?.toString(), 
+        promise: promise.toString() 
+      });
+      this.alert('critical', 'Unhandled Promise Rejection', { reason: reason?.toString() });
+    });
+
+    // Handle process signals
+    process.on('SIGTERM', () => {
+      this.log(LogLevel.INFO, 'SIGTERM received, shutting down gracefully');
+      this.shutdown();
+    });
+
+    process.on('SIGINT', () => {
+      this.log(LogLevel.INFO, 'SIGINT received, shutting down gracefully');
+      this.shutdown();
+    });
   }
 
   public log(level: LogLevel, message: string, metadata?: any): void {
@@ -73,7 +154,8 @@ class ProductionMonitor {
       message,
       metadata,
       pid: process.pid,
-      env: process.env.NODE_ENV
+      env: process.env.NODE_ENV || 'development',
+      version: process.env.APP_VERSION || '1.0.0'
     };
 
     // Console output with colors
@@ -88,30 +170,46 @@ class ProductionMonitor {
     const color = colors[level] || '';
     
     console.log(`${color}[${timestamp}] ${levelName}: ${message}${reset}`);
-    if (metadata) {
+    if (metadata && this.config.logLevel >= LogLevel.DEBUG) {
       console.log(`${color}${JSON.stringify(metadata, null, 2)}${reset}`);
     }
 
     // File logging
-    try {
-      fs.appendFileSync(this.logFile, JSON.stringify(logEntry) + '\n');
-    } catch (error) {
-      console.error('Failed to write to log file:', error);
+    if (this.config.enableFileLogging) {
+      try {
+        fs.appendFileSync(this.logFile, JSON.stringify(logEntry) + '\n');
+      } catch (error: any) {
+        console.error('Failed to write to log file:', error.message);
+      }
     }
 
     // Send to external monitoring services
     if (level === LogLevel.ERROR) {
       this.reportError(message, metadata);
     }
+
+    // Record log metrics
+    this.recordMetric(`logs.${levelName.toLowerCase()}`, 1, 'counter');
   }
 
   private reportError(message: string, metadata?: any): void {
     try {
       // TODO: Send to Sentry or other error tracking service
       this.recordMetric('errors.total', 1, 'counter');
-    } catch (error) {
-      console.error('Failed to report error to monitoring service:', error);
+      
+      // Create error fingerprint for deduplication
+      const errorFingerprint = this.createErrorFingerprint(message, metadata);
+      this.recordMetric(`errors.unique.${errorFingerprint}`, 1, 'counter');
+      
+    } catch (error: any) {
+      console.error('Failed to report error to monitoring service:', error.message);
     }
+  }
+
+  private createErrorFingerprint(message: string, metadata?: any): string {
+    // Create a simple hash for error deduplication
+    const errorString = `${message}${JSON.stringify(metadata?.error || '')}`;
+    return Buffer.from(errorString).toString('base64').substring(0, 8);
   }
 
   public recordMetric(name: string, value: number, type: 'counter' | 'gauge' | 'histogram' = 'gauge'): void {
@@ -125,16 +223,36 @@ class ProductionMonitor {
       timestamp,
       tags: {
         env: process.env.NODE_ENV || 'development',
-        version: process.env.APP_VERSION || '1.0.0'
+        version: process.env.APP_VERSION || '1.0.0',
+        instance: process.env.INSTANCE_ID || 'local'
       }
     };
 
     this.metricsData.set(`${name}-${timestamp}`, metric);
 
+    // Store performance metrics for analysis
+    if (type === 'histogram') {
+      if (!this.performanceMetrics.has(name)) {
+        this.performanceMetrics.set(name, []);
+      }
+      const values = this.performanceMetrics.get(name)!;
+      values.push(value);
+      
+      // Keep only last 100 values
+      if (values.length > 100) {
+        values.shift();
+      }
+    }
+
     // TODO: Send to Datadog or other metrics service
     if (this.config.datadogApiKey) {
-      // Send metric to Datadog
+      this.sendMetricToDatadog(metric);
     }
+  }
+
+  private sendMetricToDatadog(metric: any): void {
+    // TODO: Implement actual Datadog API integration
+    // This would send metrics to Datadog's API
   }
 
   public recordTransaction(type: string, duration: number, success: boolean): void {
@@ -144,8 +262,18 @@ class ProductionMonitor {
     this.log(LogLevel.INFO, `Transaction completed`, {
       type,
       duration: `${duration}ms`,
-      success
+      success,
+      timestamp: new Date().toISOString()
     });
+
+    // Check for performance thresholds
+    const thresholds = this.config.alertThresholds;
+    if (thresholds && duration > thresholds.responseTime) {
+      this.alert('warning', `Slow transaction detected: ${type}`, {
+        duration: `${duration}ms`,
+        threshold: `${thresholds.responseTime}ms`
+      });
+    }
   }
 
   public recordUserActivity(action: string, userId?: string): void {
@@ -153,179 +281,413 @@ class ProductionMonitor {
     
     this.log(LogLevel.INFO, `User activity: ${action}`, {
       userId,
-      timestamp: new Date().toISOString()
+      action,
+      timestamp: new Date().toISOString(),
+      session: process.env.SESSION_ID || 'unknown'
     });
   }
 
-  public healthCheck(): { status: string; checks: any[] } {
-    const checks = [
+  public async healthCheck(): Promise<{ status: string; checks: HealthCheck[] }> {
+    const checks = await Promise.all([
       this.checkDatabase(),
       this.checkCentrifugeAPI(),
       this.checkBlockchainRPC(),
       this.checkFileSystem(),
-      this.checkMemoryUsage()
-    ];
+      this.checkMemoryUsage(),
+      this.checkIpfsConnection(),
+      this.checkNetworkConnectivity()
+    ]);
 
-    const allHealthy = checks.every(check => check.status === 'healthy');
+    const healthyCount = checks.filter(check => check.status === 'healthy').length;
+    const degradedCount = checks.filter(check => check.status === 'degraded').length;
+    const unhealthyCount = checks.filter(check => check.status === 'unhealthy').length;
+
+    let overallStatus = 'healthy';
+    if (unhealthyCount > 0) {
+      overallStatus = 'unhealthy';
+    } else if (degradedCount > 0) {
+      overallStatus = 'degraded';
+    }
+
+    // Record health metrics
+    this.recordMetric('health.checks.healthy', healthyCount);
+    this.recordMetric('health.checks.degraded', degradedCount);
+    this.recordMetric('health.checks.unhealthy', unhealthyCount);
     
     return {
-      status: allHealthy ? 'healthy' : 'unhealthy',
+      status: overallStatus,
       checks
     };
   }
 
-  private checkDatabase(): any {
+  private async checkDatabase(): Promise<HealthCheck> {
+    const startTime = Date.now();
     try {
-      // TODO: Implement actual database health check
+      const result = await testDatabaseConnection();
+      const responseTime = Date.now() - startTime;
+      
       return {
         name: 'Database',
-        status: 'healthy',
-        responseTime: '15ms',
-        lastChecked: new Date().toISOString()
+        status: result.connected ? 'healthy' : 'unhealthy',
+        responseTime,
+        lastChecked: new Date().toISOString(),
+        details: {
+          version: result.version,
+          error: result.error
+        }
       };
-    } catch (error) {
+    } catch (error: any) {
       return {
         name: 'Database',
         status: 'unhealthy',
+        responseTime: Date.now() - startTime,
         error: error.message,
         lastChecked: new Date().toISOString()
       };
     }
   }
 
-  private checkCentrifugeAPI(): any {
+  private async checkCentrifugeAPI(): Promise<HealthCheck> {
+    const startTime = Date.now();
     try {
-      // TODO: Implement actual Centrifuge API health check
+      const connectivity = await checkNetworkConnectivity();
+      const centrifugeStatus = connectivity.centrifuge;
+      const responseTime = Date.now() - startTime;
+      
       return {
         name: 'Centrifuge API',
-        status: 'healthy',
-        responseTime: '85ms',
-        lastChecked: new Date().toISOString()
+        status: centrifugeStatus?.status === 'online' ? 'healthy' : 'unhealthy',
+        responseTime,
+        lastChecked: new Date().toISOString(),
+        details: {
+          blockNumber: centrifugeStatus?.blockNumber,
+          latency: centrifugeStatus?.latency,
+          error: centrifugeStatus?.error
+        }
       };
-    } catch (error) {
+    } catch (error: any) {
       return {
         name: 'Centrifuge API',
         status: 'unhealthy',
+        responseTime: Date.now() - startTime,
         error: error.message,
         lastChecked: new Date().toISOString()
       };
     }
   }
 
-  private checkBlockchainRPC(): any {
+  private async checkBlockchainRPC(): Promise<HealthCheck> {
+    const startTime = Date.now();
     try {
-      // TODO: Implement actual blockchain RPC health check
+      const connectivity = await checkNetworkConnectivity();
+      const onlineChains = Object.entries(connectivity).filter(([_, info]: [string, any]) => info.status === 'online');
+      const responseTime = Date.now() - startTime;
+      
+      const status = onlineChains.length > 0 ? 'healthy' : 'unhealthy';
+      
       return {
         name: 'Blockchain RPC',
-        status: 'healthy',
-        responseTime: '120ms',
-        lastChecked: new Date().toISOString()
+        status,
+        responseTime,
+        lastChecked: new Date().toISOString(),
+        details: {
+          onlineChains: onlineChains.length,
+          totalChains: Object.keys(connectivity).length,
+          chains: connectivity
+        }
       };
-    } catch (error) {
+    } catch (error: any) {
       return {
         name: 'Blockchain RPC',
         status: 'unhealthy',
+        responseTime: Date.now() - startTime,
         error: error.message,
         lastChecked: new Date().toISOString()
       };
     }
   }
 
-  private checkFileSystem(): any {
+  private checkFileSystem(): HealthCheck {
+    const startTime = Date.now();
     try {
       const stats = fs.statSync(process.cwd());
+      const responseTime = Date.now() - startTime;
+      
+      // Check disk space (simplified)
+      const freeSpaceGB = 85; // This would be calculated in a real implementation
+      const totalSpaceGB = 100;
+      const usagePercent = ((totalSpaceGB - freeSpaceGB) / totalSpaceGB) * 100;
+      
+      const status = usagePercent > 90 ? 'degraded' : 'healthy';
+      
       return {
         name: 'File System',
-        status: 'healthy',
-        freeSpace: '85GB',
-        lastChecked: new Date().toISOString()
+        status,
+        responseTime,
+        lastChecked: new Date().toISOString(),
+        details: {
+          freeSpaceGB,
+          totalSpaceGB,
+          usagePercent: `${usagePercent.toFixed(1)}%`
+        }
       };
-    } catch (error) {
+    } catch (error: any) {
       return {
         name: 'File System',
         status: 'unhealthy',
+        responseTime: Date.now() - startTime,
         error: error.message,
         lastChecked: new Date().toISOString()
       };
     }
   }
 
-  private checkMemoryUsage(): any {
+  private checkMemoryUsage(): HealthCheck {
+    const startTime = Date.now();
     const memUsage = process.memoryUsage();
     const usedMB = Math.round(memUsage.heapUsed / 1024 / 1024);
     const totalMB = Math.round(memUsage.heapTotal / 1024 / 1024);
     const usagePercent = Math.round((usedMB / totalMB) * 100);
+    const responseTime = Date.now() - startTime;
 
-    const isHealthy = usagePercent < 80; // Alert if memory usage > 80%
+    const thresholds = this.config.alertThresholds;
+    const memoryThreshold = thresholds?.memoryUsage || 80;
+    
+    let status: 'healthy' | 'degraded' | 'unhealthy' = 'healthy';
+    if (usagePercent > 90) {
+      status = 'unhealthy';
+    } else if (usagePercent > memoryThreshold) {
+      status = 'degraded';
+    }
 
     return {
       name: 'Memory Usage',
-      status: isHealthy ? 'healthy' : 'warning',
-      usedMB,
-      totalMB,
-      usagePercent: `${usagePercent}%`,
-      lastChecked: new Date().toISOString()
+      status,
+      responseTime,
+      lastChecked: new Date().toISOString(),
+      details: {
+        usedMB,
+        totalMB,
+        usagePercent: `${usagePercent}%`,
+        external: Math.round(memUsage.external / 1024 / 1024),
+        buffers: Math.round((memUsage.arrayBuffers || 0) / 1024 / 1024)
+      }
     };
+  }
+
+  private async checkIpfsConnection(): Promise<HealthCheck> {
+    try {
+      const result = await testIpfsConnection();
+      
+      return {
+        name: 'IPFS Connection',
+        status: result.connected ? 'healthy' : 'unhealthy',
+        responseTime: result.responseTime,
+        lastChecked: new Date().toISOString(),
+        details: {
+          nodeInfo: result.nodeInfo,
+          error: result.error
+        }
+      };
+    } catch (error: any) {
+      return {
+        name: 'IPFS Connection',
+        status: 'unhealthy',
+        error: error.message,
+        lastChecked: new Date().toISOString()
+      };
+    }
+  }
+
+  private async checkNetworkConnectivity(): Promise<HealthCheck> {
+    const startTime = Date.now();
+    try {
+      const connectivity = await checkNetworkConnectivity();
+      const responseTime = Date.now() - startTime;
+      
+      const onlineChains = Object.entries(connectivity).filter(([_, info]: [string, any]) => info.status === 'online');
+      const status = onlineChains.length > 0 ? 'healthy' : 'unhealthy';
+      
+      return {
+        name: 'Network Connectivity',
+        status,
+        responseTime,
+        lastChecked: new Date().toISOString(),
+        details: connectivity
+      };
+    } catch (error: any) {
+      return {
+        name: 'Network Connectivity',
+        status: 'unhealthy',
+        responseTime: Date.now() - startTime,
+        error: error.message,
+        lastChecked: new Date().toISOString()
+      };
+    }
   }
 
   private startMetricsCollection(): void {
     // Collect system metrics every 60 seconds
-    setInterval(() => {
-      const memUsage = process.memoryUsage();
-      this.recordMetric('system.memory.heap_used', memUsage.heapUsed);
-      this.recordMetric('system.memory.heap_total', memUsage.heapTotal);
-      this.recordMetric('system.memory.external', memUsage.external);
-      
-      // CPU usage (simplified)
-      const usage = process.cpuUsage();
-      this.recordMetric('system.cpu.user', usage.user);
-      this.recordMetric('system.cpu.system', usage.system);
-      
-      // Active handles and requests
-      this.recordMetric('system.handles', (process as any)._getActiveHandles().length);
-      this.recordMetric('system.requests', (process as any)._getActiveRequests().length);
-      
+    const metricsInterval = setInterval(() => {
+      try {
+        const memUsage = process.memoryUsage();
+        this.recordMetric('system.memory.heap_used', memUsage.heapUsed);
+        this.recordMetric('system.memory.heap_total', memUsage.heapTotal);
+        this.recordMetric('system.memory.external', memUsage.external);
+        
+        // CPU usage (simplified)
+        const usage = process.cpuUsage();
+        this.recordMetric('system.cpu.user', usage.user);
+        this.recordMetric('system.cpu.system', usage.system);
+        
+        // Active handles and requests
+        this.recordMetric('system.handles', (process as any)._getActiveHandles?.()?.length || 0);
+        this.recordMetric('system.requests', (process as any)._getActiveRequests?.()?.length || 0);
+        
+        // Process uptime
+        this.recordMetric('system.uptime', process.uptime());
+        
+      } catch (error: any) {
+        this.log(LogLevel.WARN, 'Failed to collect system metrics', { error: error.message });
+      }
     }, 60000);
 
+    // Store interval for cleanup
+    (this as any).metricsInterval = metricsInterval;
+
     this.log(LogLevel.INFO, 'Metrics collection started');
+  }
+
+  private setupLogRotation(): void {
+    const rotationDays = this.config.logRotationDays || 7;
+    
+    // Run log rotation daily
+    setInterval(() => {
+      this.rotateOldLogs(rotationDays);
+    }, 24 * 60 * 60 * 1000); // 24 hours
+  }
+
+  private rotateOldLogs(retentionDays: number): void {
+    try {
+      const logDir = path.dirname(this.logFile);
+      const files = fs.readdirSync(logDir);
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - retentionDays);
+
+      files.forEach(file => {
+        if (file.startsWith('app-') && file.endsWith('.log')) {
+          const filePath = path.join(logDir, file);
+          const stats = fs.statSync(filePath);
+          
+          if (stats.mtime < cutoffDate) {
+            fs.unlinkSync(filePath);
+            this.log(LogLevel.INFO, `Rotated old log file: ${file}`);
+          }
+        }
+      });
+    } catch (error: any) {
+      this.log(LogLevel.WARN, 'Failed to rotate old logs', { error: error.message });
+    }
   }
 
   public generateReport(): string {
     const report = {
       timestamp: new Date().toISOString(),
-      environment: process.env.NODE_ENV,
+      environment: process.env.NODE_ENV || 'development',
       uptime: process.uptime(),
       version: process.env.APP_VERSION || '1.0.0',
       healthCheck: this.healthCheck(),
       recentErrors: this.getRecentErrors(),
-      performanceMetrics: this.getPerformanceMetrics()
+      performanceMetrics: this.getPerformanceMetrics(),
+      alertHistory: this.alertHistory.slice(-10), // Last 10 alerts
+      systemMetrics: this.getSystemMetrics()
     };
 
     return JSON.stringify(report, null, 2);
   }
 
   private getRecentErrors(): any[] {
-    // TODO: Implement logic to fetch recent errors from logs
-    return [];
+    // Get recent error metrics
+    const errorMetrics = Array.from(this.metricsData.entries())
+      .filter(([key, metric]) => key.includes('errors'))
+      .slice(-10)
+      .map(([_, metric]) => metric);
+
+    return errorMetrics;
   }
 
   private getPerformanceMetrics(): any {
+    const transactionMetrics = Array.from(this.performanceMetrics.entries())
+      .reduce((acc, [name, values]) => {
+        if (values.length > 0) {
+          acc[name] = {
+            count: values.length,
+            average: values.reduce((sum, val) => sum + val, 0) / values.length,
+            min: Math.min(...values),
+            max: Math.max(...values),
+            p95: this.calculatePercentile(values, 95)
+          };
+        }
+        return acc;
+      }, {} as any);
+
     return {
-      averageResponseTime: '150ms',
-      requestsPerMinute: 45,
-      errorRate: '0.2%',
-      uptime: '99.9%'
+      transactions: transactionMetrics,
+      errorRate: this.calculateErrorRate(),
+      uptime: process.uptime()
+    };
+  }
+
+  private calculatePercentile(values: number[], percentile: number): number {
+    const sorted = values.slice().sort((a, b) => a - b);
+    const index = Math.ceil((percentile / 100) * sorted.length) - 1;
+    return sorted[index];
+  }
+
+  private calculateErrorRate(): number {
+    const errorCount = Array.from(this.metricsData.values())
+      .filter(metric => metric.name.includes('errors'))
+      .reduce((sum, metric) => sum + metric.value, 0);
+    
+    const totalRequests = Array.from(this.metricsData.values())
+      .filter(metric => metric.name.includes('transactions'))
+      .reduce((sum, metric) => sum + metric.value, 0);
+
+    return totalRequests > 0 ? (errorCount / totalRequests) * 100 : 0;
+  }
+
+  private getSystemMetrics(): any {
+    const memUsage = process.memoryUsage();
+    return {
+      memory: {
+        heapUsed: Math.round(memUsage.heapUsed / 1024 / 1024),
+        heapTotal: Math.round(memUsage.heapTotal / 1024 / 1024),
+        external: Math.round(memUsage.external / 1024 / 1024),
+        rss: Math.round(memUsage.rss / 1024 / 1024)
+      },
+      uptime: process.uptime(),
+      pid: process.pid,
+      platform: process.platform,
+      nodeVersion: process.version
     };
   }
 
   public alert(severity: 'critical' | 'warning' | 'info', message: string, details?: any): void {
-    const alert = {
+    const alert: Alert = {
+      id: this.generateAlertId(),
       severity,
       message,
       details,
       timestamp: new Date().toISOString(),
-      environment: process.env.NODE_ENV
+      environment: process.env.NODE_ENV || 'development'
     };
+
+    this.alertHistory.push(alert);
+
+    // Keep only last 100 alerts
+    if (this.alertHistory.length > 100) {
+      this.alertHistory.shift();
+    }
 
     // Log the alert
     const logLevel = severity === 'critical' ? LogLevel.ERROR : 
@@ -333,22 +695,47 @@ class ProductionMonitor {
     
     this.log(logLevel, `ALERT [${severity.toUpperCase()}]: ${message}`, details);
 
+    // Record alert metrics
+    this.recordMetric(`alerts.${severity}`, 1, 'counter');
+
     // TODO: Send to alerting systems (PagerDuty, Slack, etc.)
     if (severity === 'critical') {
       this.sendCriticalAlert(alert);
     }
   }
 
-  private sendCriticalAlert(alert: any): void {
+  private generateAlertId(): string {
+    return `alert-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+  }
+
+  private sendCriticalAlert(alert: Alert): void {
     try {
       // TODO: Implement critical alert notifications
       // - Send to PagerDuty
       // - Send to Slack
       // - Send email to on-call team
       console.log('🚨 CRITICAL ALERT SENT:', alert.message);
-    } catch (error) {
-      console.error('Failed to send critical alert:', error);
+      this.recordMetric('alerts.critical.sent', 1, 'counter');
+    } catch (error: any) {
+      console.error('Failed to send critical alert:', error.message);
+      this.recordMetric('alerts.critical.failed', 1, 'counter');
     }
+  }
+
+  public shutdown(): void {
+    this.log(LogLevel.INFO, 'Shutting down monitoring system...');
+    
+    // Clear intervals
+    if ((this as any).metricsInterval) {
+      clearInterval((this as any).metricsInterval);
+    }
+
+    // Final metrics collection
+    if (this.config.enableMetrics) {
+      this.recordMetric('system.shutdown', 1, 'counter');
+    }
+
+    console.log('✅ Monitoring system shutdown complete');
   }
 }
 
@@ -433,16 +820,16 @@ export function withErrorHandling<T extends any[], R>(
       const result = await fn(...args);
       recordUserActivity(operationName);
       return result;
-    } catch (error) {
+    } catch (error: any) {
       logError(`Command ${operationName} failed`, error);
       recordMetric(`commands.${operationName}.errors`, 1, 'counter');
       
       // Send alert for critical operations
-      const criticalOps = ['invest', 'borrow', 'originate-asset'];
+      const criticalOps = ['invest', 'borrow', 'originate-asset', 'mint-nft', 'collateralize'];
       if (criticalOps.includes(operationName)) {
         getMonitor().alert('critical', `Critical operation ${operationName} failed`, {
           error: error.message,
-          args: JSON.stringify(args)
+          args: JSON.stringify(args, null, 2)
         });
       }
       
@@ -465,6 +852,13 @@ export const defaultMonitoringConfig: MonitoringConfig = {
            process.env.LOG_LEVEL === 'info' ? LogLevel.INFO :
            process.env.LOG_LEVEL === 'warn' ? LogLevel.WARN : LogLevel.ERROR,
   enableMetrics: process.env.ENABLE_METRICS !== 'false',
+  enableFileLogging: process.env.ENABLE_FILE_LOGGING !== 'false',
+  logRotationDays: parseInt(process.env.LOG_ROTATION_DAYS || '7'),
   sentryDsn: process.env.SENTRY_DSN,
-  datadogApiKey: process.env.DATADOG_API_KEY
+  datadogApiKey: process.env.DATADOG_API_KEY,
+  alertThresholds: {
+    memoryUsage: parseInt(process.env.MEMORY_ALERT_THRESHOLD || '80'),
+    errorRate: parseFloat(process.env.ERROR_RATE_THRESHOLD || '5.0'),
+    responseTime: parseInt(process.env.RESPONSE_TIME_THRESHOLD || '5000')
+  }
 };

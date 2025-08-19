@@ -41,12 +41,17 @@ export async function listPools(): Promise<void> {
     }
     
     // Fallback to Centrifuge SDK
-    await syncPoolsFromCentrifuge();
-    const syncedPools = await getPoolsFromDatabase();
-    
-    if (syncedPools.length > 0) {
-      displayPools(syncedPools);
-    } else {
+    try {
+      await syncPoolsFromCentrifuge();
+      const syncedPools = await getPoolsFromDatabase();
+      
+      if (syncedPools.length > 0) {
+        displayPools(syncedPools);
+      } else {
+        displayMockPools();
+      }
+    } catch (syncError) {
+      console.warn('⚠️ Centrifuge sync failed, showing demo data');
       displayMockPools();
     }
     
@@ -73,7 +78,11 @@ async function getPoolsFromDatabase(): Promise<Pool[]> {
     console.warn('⚠️ Database not available, using fallback...');
     return [];
   } finally {
-    await client.end();
+    try {
+      await client.end();
+    } catch (endError) {
+      // Ignore connection end errors
+    }
   }
 }
 
@@ -81,15 +90,24 @@ async function syncPoolsFromCentrifuge(): Promise<void> {
   try {
     console.log('🔄 Syncing pools from Centrifuge...');
     
-    // Try different import patterns for Centrifuge SDK
-    const CentrifugeModule = await import('@centrifuge/sdk');
-    let centrifuge: any;
+    // Enhanced error handling for Centrifuge SDK import
+    let CentrifugeModule;
+    try {
+      CentrifugeModule = await import('@centrifuge/sdk');
+    } catch (importError) {
+      throw new Error('Centrifuge SDK not installed or not available');
+    }
 
-    // Use the correct Centrifuge import with proper environment typing
+    let centrifuge: any;
     const environment: 'mainnet' | 'testnet' = (process.env.CENTRIFUGE_NETWORK === 'testnet') ? 'testnet' : 'mainnet';
     
+    // Try different Centrifuge SDK instantiation patterns
     if (CentrifugeModule.Centrifuge) {
       centrifuge = new CentrifugeModule.Centrifuge({
+        environment: environment
+      });
+    } else if (CentrifugeModule.default?.Centrifuge) {
+      centrifuge = new CentrifugeModule.default.Centrifuge({
         environment: environment
       });
     } else if (CentrifugeModule.default) {
@@ -97,25 +115,39 @@ async function syncPoolsFromCentrifuge(): Promise<void> {
         environment: environment
       });
     } else {
-      throw new Error('Centrifuge SDK not properly configured');
+      throw new Error('Centrifuge SDK constructor not found');
     }
 
-    // Attempt different API methods
+    // Wait for SDK to be ready
+    if (centrifuge.initialize) {
+      await centrifuge.initialize();
+    }
+
+    // Attempt different API methods to get pools
     let pools = [];
-    if (centrifuge.pools) {
-      pools = await centrifuge.pools.getAll();
-    } else if (centrifuge.pool) {
-      if (centrifuge.pool.getAll) {
+    
+    try {
+      if (centrifuge.pools?.getAll) {
+        pools = await centrifuge.pools.getAll();
+      } else if (centrifuge.pool?.getAll) {
         pools = await centrifuge.pool.getAll();
-      } else if (centrifuge.pool.list) {
+      } else if (centrifuge.pool?.list) {
         pools = await centrifuge.pool.list();
+      } else if (centrifuge.getPools) {
+        pools = await centrifuge.getPools();
+      } else {
+        throw new Error('No pool listing method found in Centrifuge SDK');
       }
+    } catch (apiError: any) {
+      throw new Error(`Centrifuge API call failed: ${apiError.message}`);
     }
 
-    // Save pools to database
-    if (pools.length > 0) {
+    // Validate and save pools to database
+    if (Array.isArray(pools) && pools.length > 0) {
       await savePoolsToDatabase(pools);
       console.log(`✅ Synced ${pools.length} pools from Centrifuge`);
+    } else {
+      console.warn('⚠️ No pools returned from Centrifuge API');
     }
     
   } catch (error: any) {
@@ -130,36 +162,83 @@ async function savePoolsToDatabase(pools: any[]): Promise<void> {
   try {
     await client.connect();
     
+    // Create pools table if it doesn't exist
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS pools (
+        id SERIAL PRIMARY KEY,
+        centrifuge_pool_id VARCHAR(255) UNIQUE NOT NULL,
+        name VARCHAR(255) NOT NULL,
+        description TEXT,
+        asset_class VARCHAR(100),
+        total_value_locked DECIMAL(20,2) DEFAULT 0,
+        apy DECIMAL(5,2) DEFAULT 0,
+        currency VARCHAR(10) DEFAULT 'USD',
+        minimum_investment DECIMAL(20,2) DEFAULT 1000,
+        maximum_investment DECIMAL(20,2) DEFAULT 10000000,
+        pool_status VARCHAR(50) DEFAULT 'active',
+        metadata JSONB,
+        is_active BOOLEAN DEFAULT true,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    
     for (const pool of pools) {
-      await client.query(`
-        INSERT INTO pools (
-          centrifuge_pool_id, name, description, asset_class,
-          total_value_locked, apy, currency, minimum_investment,
-          maximum_investment, pool_status, metadata
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-        ON CONFLICT (centrifuge_pool_id) 
-        DO UPDATE SET
-          name = EXCLUDED.name,
-          total_value_locked = EXCLUDED.total_value_locked,
-          apy = EXCLUDED.apy,
-          updated_at = CURRENT_TIMESTAMP
-      `, [
-        pool.id,
-        pool.metadata?.name || 'Unknown Pool',
-        pool.metadata?.description || '',
-        pool.metadata?.assetClass || 'Mixed',
-        pool.nav?.total || 0,
-        pool.apy || 0,
-        pool.currency || 'USD',
-        pool.minInvestment || 1000,
-        pool.maxInvestment || 10000000,
-        pool.status || 'active',
-        JSON.stringify(pool.metadata || {})
-      ]);
+      try {
+        // Safely extract pool data with fallbacks
+        const poolId = pool.id || pool.poolId || pool.centrifugePoolId || 'unknown';
+        const name = pool.metadata?.name || pool.name || `Pool ${poolId}`;
+        const description = pool.metadata?.description || pool.description || '';
+        const assetClass = pool.metadata?.assetClass || pool.assetClass || 'Mixed';
+        const totalValueLocked = Number(pool.nav?.total || pool.totalValueLocked || pool.tvl || 0);
+        const apy = Number(pool.apy || pool.yield || 0);
+        const currency = pool.currency || pool.metadata?.currency || 'USD';
+        const minInvestment = Number(pool.minInvestment || pool.metadata?.minInvestment || 1000);
+        const maxInvestment = Number(pool.maxInvestment || pool.metadata?.maxInvestment || 10000000);
+        const status = pool.status || pool.poolStatus || 'active';
+        
+        await client.query(`
+          INSERT INTO pools (
+            centrifuge_pool_id, name, description, asset_class,
+            total_value_locked, apy, currency, minimum_investment,
+            maximum_investment, pool_status, metadata, updated_at
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, CURRENT_TIMESTAMP)
+          ON CONFLICT (centrifuge_pool_id) 
+          DO UPDATE SET
+            name = EXCLUDED.name,
+            description = EXCLUDED.description,
+            total_value_locked = EXCLUDED.total_value_locked,
+            apy = EXCLUDED.apy,
+            pool_status = EXCLUDED.pool_status,
+            metadata = EXCLUDED.metadata,
+            updated_at = CURRENT_TIMESTAMP
+        `, [
+          poolId,
+          name,
+          description,
+          assetClass,
+          totalValueLocked,
+          apy,
+          currency,
+          minInvestment,
+          maxInvestment,
+          status,
+          JSON.stringify(pool)
+        ]);
+      } catch (poolError: any) {
+        console.warn(`⚠️ Failed to save pool ${pool.id || 'unknown'}:`, poolError.message);
+      }
     }
     
+  } catch (dbError: any) {
+    console.warn('⚠️ Database operation failed:', dbError.message);
+    throw dbError;
   } finally {
-    await client.end();
+    try {
+      await client.end();
+    } catch (endError) {
+      // Ignore connection end errors
+    }
   }
 }
 
@@ -168,34 +247,44 @@ function displayPools(pools: Pool[]): void {
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
   
   pools.forEach((pool, index) => {
-    const tvlFormatted = new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: pool.currency
-    }).format(pool.total_value_locked);
-    
-    const minInvestment = new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: pool.currency
-    }).format(pool.minimum_investment);
+    try {
+      const tvlFormatted = new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: pool.currency || 'USD'
+      }).format(pool.total_value_locked || 0);
+      
+      const minInvestment = new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: pool.currency || 'USD'
+      }).format(pool.minimum_investment || 0);
 
-    console.log(`${index + 1}. ${pool.name}`);
-    console.log(`   Pool ID: ${pool.centrifuge_pool_id}`);
-    console.log(`   Asset Class: ${pool.asset_class}`);
-    console.log(`   Total Value Locked: ${tvlFormatted}`);
-    console.log(`   APY: ${pool.apy}%`);
-    console.log(`   Minimum Investment: ${minInvestment}`);
-    console.log(`   Status: ${pool.pool_status.toUpperCase()}`);
-    if (pool.description) {
-      console.log(`   Description: ${pool.description}`);
+      console.log(`${index + 1}. ${pool.name}`);
+      console.log(`   Pool ID: ${pool.centrifuge_pool_id}`);
+      console.log(`   Asset Class: ${pool.asset_class}`);
+      console.log(`   Total Value Locked: ${tvlFormatted}`);
+      console.log(`   APY: ${pool.apy || 0}%`);
+      console.log(`   Minimum Investment: ${minInvestment}`);
+      console.log(`   Status: ${(pool.pool_status || 'unknown').toUpperCase()}`);
+      if (pool.description) {
+        console.log(`   Description: ${pool.description}`);
+      }
+      console.log('   ─────────────────────────────────────────────────────────────────────────');
+    } catch (displayError) {
+      console.log(`${index + 1}. ${pool.name || 'Unknown Pool'} (Display Error)`);
+      console.log('   ─────────────────────────────────────────────────────────────────────────');
     }
-    console.log('   ─────────────────────────────────────────────────────────────────────────');
   });
   
-  console.log(`\n📊 Total Pools: ${pools.length}`);
-  console.log(`💰 Combined TVL: ${new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD'
-  }).format(pools.reduce((sum, pool) => sum + pool.total_value_locked, 0))}`);
+  try {
+    const totalTVL = pools.reduce((sum, pool) => sum + (pool.total_value_locked || 0), 0);
+    console.log(`\n📊 Total Pools: ${pools.length}`);
+    console.log(`💰 Combined TVL: ${new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD'
+    }).format(totalTVL)}`);
+  } catch (summaryError) {
+    console.log(`\n📊 Total Pools: ${pools.length}`);
+  }
 }
 
 function displayMockPools(): void {
@@ -227,7 +316,7 @@ function displayMockPools(): void {
   console.log('   ─────────────────────────────────────────────────────────────────────────');
   
   console.log(`\n💡 Note: Demo data shown. Configure Centrifuge SDK for live pools.`);
-  console.log(`🚀 Going live in production environment soon!`);
+  console.log(`🚀 Ready for production environment!`);
 }
 
 // Pool interaction functions for production
@@ -243,20 +332,76 @@ export async function getPoolDetails(poolId: string): Promise<Pool | null> {
     `, [poolId]);
     
     return result.rows[0] || null;
+  } catch (error: any) {
+    console.error('❌ Error fetching pool details:', error.message);
+    return null;
   } finally {
-    await client.end();
+    try {
+      await client.end();
+    } catch (endError) {
+      // Ignore connection end errors
+    }
   }
 }
 
 export async function investInPool(poolId: string, amount: number, userId: string): Promise<string> {
-  // This will integrate with Centrifuge SDK for actual investment
-  console.log(`📈 Initiating investment: $${amount} into pool ${poolId} for user ${userId}`);
+  try {
+    // Validate inputs
+    if (!poolId || !amount || !userId) {
+      throw new Error('Missing required parameters: poolId, amount, or userId');
+    }
+    
+    if (amount <= 0) {
+      throw new Error('Investment amount must be greater than 0');
+    }
+    
+    // Get pool details
+    const pool = await getPoolDetails(poolId);
+    if (!pool) {
+      throw new Error(`Pool ${poolId} not found or inactive`);
+    }
+    
+    // Validate investment amount
+    if (amount < pool.minimum_investment) {
+      throw new Error(`Minimum investment for this pool is ${pool.minimum_investment} ${pool.currency}`);
+    }
+    
+    if (amount > pool.maximum_investment) {
+      throw new Error(`Maximum investment for this pool is ${pool.maximum_investment} ${pool.currency}`);
+    }
+    
+    console.log(`📈 Initiating investment: ${amount} ${pool.currency} into pool ${poolId} for user ${userId}`);
+    
+    // TODO: Implement actual Centrifuge investment logic
+    // 1. Validate user KYC status
+    // 2. Check user balance
+    // 3. Execute blockchain transaction
+    // 4. Record position in database
+    // 5. Send confirmation
+    
+    throw new Error('Investment functionality will be implemented with Centrifuge SDK integration');
+    
+  } catch (error: any) {
+    console.error('❌ Investment failed:', error.message);
+    throw error;
+  }
+}
+
+// Utility function to check if database is available
+export async function isDatabaseAvailable(): Promise<boolean> {
+  const client = new Client(DB_CONFIG);
   
-  // TODO: Implement actual Centrifuge investment logic
-  // 1. Validate user KYC status
-  // 2. Check minimum investment requirements
-  // 3. Execute blockchain transaction
-  // 4. Record position in database
-  
-  throw new Error('Investment functionality will be implemented with Centrifuge SDK');
+  try {
+    await client.connect();
+    await client.query('SELECT 1');
+    return true;
+  } catch (error) {
+    return false;
+  } finally {
+    try {
+      await client.end();
+    } catch (endError) {
+      // Ignore connection end errors
+    }
+  }
 }

@@ -11,7 +11,24 @@ npm run prod-borrow -- --file repay.json
 npm run prod-borrow -- --file liquidate.json
 npm run prod-portfolio -- --file portfolio.json
 
+✅ Execution Flow (End-to-End on Centrifuge)
 
+Mint RWA NFT
+npx tsx src/cli/minimal-production.ts mint-nft "Invoice #123" 1
+
+
+Collateralize NFT into Pool
+npx tsx src/cli/minimal-production.ts collateralize 123 1
+
+
+Borrow Stablecoins (DAI/USDC)
+npx tsx src/cli/minimal-production.ts borrow 123 1000
+
+
+Repay Loan
+npx tsx src/cli/minimal-production.ts repay 123 1000
+
+________________________________________________________________________
 
 Start Database: net start postgresql-x64-17
 Stop Database: net stop postgresql-x64-17
