@@ -11,6 +11,14 @@ npm run prod-borrow -- --file repay.json
 npm run prod-borrow -- --file liquidate.json
 npm run prod-portfolio -- --file portfolio.json
 
+# Your complete borrowing workflow already works:
+npx ts-node src/utils/1-simple-nft.ts     # Tokenize property
+npx ts-node src/utils/2-issue-loan.ts     # Issue loan
+npx ts-node src/utils/3-lock-collateral.ts # Lock collateral  
+npx ts-node src/utils/4-borrow-funds.ts   # BORROW MONEY! 💰
+
+_____________________________________________________________
+
 ✅ Execution Flow (End-to-End on Centrifuge)
 
 Mint RWA NFT
