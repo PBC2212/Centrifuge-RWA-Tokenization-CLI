@@ -1,0 +1,14 @@
+{
+  "contractAddress": "0x4741fbC7985853ca2c2685FaCB6a895CA30A31f5",
+  "deployer": "0x7931edfa6255D59AEe5A65D26E6a7e3CF30E8339",
+  "governanceMembers": [
+    "0x7931edfa6255D59AEe5A65D26E6a7e3CF30E8339"
+  ],
+  "governanceThreshold": "2",
+  "verifiedAppraisers": [
+    "0x7931edfa6255D59AEe5A65D26E6a7e3CF30E8339"
+  ],
+  "transactionHash": "0xfdb3debec6278de7b1e8a0dd00ad318c1f519b4c0b22c9d0ba4ebcd1f39134cc",
+  "gasUsed": "N/A",
+  "deploymentCost": "N/A"
+}
